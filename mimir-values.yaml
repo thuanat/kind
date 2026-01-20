@@ -1,16 +1,20 @@
-# =========================================================
-# MIMIR SINGLE BINARY CONFIG FOR LAB (KIND/K8S)
-# =========================================================
-
-# 1. Ép chạy chế độ một Pod duy nhất
+# Chế độ chạy
 deploymentMode: SingleBinary
 
-# 2. Cấu hình Mimir Core
+# TẮT CÁC THÀNH PHẦN PHỤ (Nằm ở cấp cao nhất)
+minio:
+  enabled: false
+nginx:
+  enabled: false
+enterprise:
+  enabled: false
+mimir-distributed: # Một số version chart yêu cầu key này
+  enabled: false
+
+# Cấu hình Mimir Core
 mimir:
   structuredConfig:
     multitenancy_enabled: false
-    
-    # Cấu hình lưu trữ Filesystem thay vì S3/Minio
     common:
       storage:
         backend: filesystem
@@ -27,7 +31,7 @@ mimir:
       filesystem:
         dir: /data/mimir/rules
 
-# 3. Tắt tất cả các thành phần của bản Distributed
+# Ép tất cả replicas về 0 (để chắc chắn)
 ingester:
   replicas: 0
 querier:
@@ -48,16 +52,3 @@ query_scheduler:
   replicas: 0
 overrides_exporter:
   replicas: 0
-
-# 4. Tắt các phụ kiện tốn tài nguyên (Minio, Kafka)
-minio:
-  enabled: false
-nginx:
-  enabled: false # Tắt gateway rời để tránh lỗi 502 khi config sai
-
-# 5. Cấu hình Service để Grafana dễ kết nối
-# Service này sẽ gom vào Pod Single Binary
-results_cache:
-  enabled: false
-chunks_cache:
-  enabled: false

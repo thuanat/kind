@@ -1,3 +1,5 @@
+deploymentMode: SingleBinary
+
 loki:
   auth_enabled: false
   commonConfig:
@@ -13,20 +15,14 @@ loki:
         index:
           prefix: index_
           period: 24h
-  # Tắt cache để tránh lỗi Pending do thiếu tài nguyên
-  chunksCache:
-    enabled: false
-  resultsCache:
-    enabled: false
 
-deploymentMode: SingleBinary
-
-# Tắt các thành phần của chế độ Scalable
-read:
-  replicas: 0
-write:
-  replicas: 0
-backend:
-  replicas: 0
+# TẮT CÁC THÀNH PHẦN PHỤ
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
 gateway:
-  enabled: true
+  enabled: false
+monitoring:
+  lokiCanary:
+    enabled: false # Tắt luôn loki-canary nếu muốn cực nhẹ
