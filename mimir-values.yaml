@@ -19,11 +19,11 @@ mimir:
       filesystem:
         dir: /data/mimir/rules
 
+# Ép Pod Single Binary chạy và có quyền ghi data
 singleBinary:
   replicas: 1
   persistence:
     enabled: false
-  # Sửa lỗi Read-only bằng emptyDir
   extraVolumes:
     - name: storage
       emptyDir: {}
@@ -31,16 +31,10 @@ singleBinary:
     - name: storage
       mountPath: /data
 
-# Tắt toàn bộ các thành phần Distributed gây tốn tài nguyên
-minio: {enabled: false}
-nginx: {enabled: false}
-ingester: {replicas: 0}
-querier: {replicas: 0}
-query_frontend: {replicas: 0}
-distributor: {replicas: 0}
-compactor: {replicas: 0}
-store_gateway: {replicas: 0}
-ruler: {replicas: 0}
-alertmanager: {replicas: 0}
-query_scheduler: {replicas: 0}
-overrides_exporter: {replicas: 0}
+# VÔ HIỆU HÓA tất cả các thành phần distributed (quan trọng)
+mimir-distributed:
+  enabled: false # Tắt chart phụ nếu có
+nginx: { enabled: false }
+gateway: { enabled: false }
+kafka: { enabled: false }
+minio: { enabled: false }
