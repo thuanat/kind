@@ -1,12 +1,20 @@
+deploymentMode: SingleBinary
+
 loki:
   auth_enabled: false
-  commonConfig:
-    replication_factor: 1
+  
+  # Cấu hình lưu trữ
   storage:
     type: 'filesystem'
-    bucketNames:
-      chunks: 'chunks'
-      index: 'index'
+  
+  commonConfig:
+    replication_factor: 1
+    path_prefix: /var/loki
+    storage:
+      filesystem:
+        chunks_directory: /var/loki/chunks
+        rules_directory: /var/loki/rules
+
   schemaConfig:
     configs:
       - from: "2024-01-01"
@@ -17,29 +25,26 @@ loki:
           prefix: index_
           period: 24h
 
-deploymentMode: SingleBinary
-
-lokiCanary:
-  enabled: true
-
-# SỬA LỖI PERMISSION: Cấp quyền cho user loki (uid 10001)
+# Sửa lỗi Permission và ép chạy
 singleBinary:
   replicas: 1
   persistence:
-    enabled: false
+    enabled: false # Dùng emptyDir để tránh lỗi ổ đĩa trên Kind
   extraArgs:
     - "-config.expand-env=true"
-# Quan trọng: Đảm bảo pod có quyền ghi disk
-lokiInterface:
-  securityContext:
-    fsGroup: 10001
-    runAsGroup: 10001
-    runAsUser: 10001
 
-# Tắt sạch các thành phần thừa
+# Tắt toàn bộ các thành phần gây nhiễu
 backend: {replicas: 0}
 read: {replicas: 0}
 write: {replicas: 0}
 gateway: {enabled: false}
 chunksCache: {enabled: false}
 resultsCache: {enabled: false}
+lokiCanary: {enabled: true}
+
+# Cấp quyền ghi vào /var/loki
+lokiInterface:
+  securityContext:
+    fsGroup: 10001
+    runAsGroup: 10001
+    runAsUser: 10001
