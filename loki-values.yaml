@@ -1,14 +1,12 @@
 loki:
   auth_enabled: false
-  
-  # Cấu hình lưu trữ Filesystem cho Loki Core
+  commonConfig:
+    replication_factor: 1
   storage:
     type: 'filesystem'
     bucketNames:
       chunks: 'chunks'
       index: 'index'
-  
-  # Cấu hình Schema bắt buộc dùng filesystem
   schemaConfig:
     configs:
       - from: "2024-01-01"
@@ -19,13 +17,14 @@ loki:
           prefix: index_
           period: 24h
 
-  commonConfig:
-    replication_factor: 1
-
-# ÉP CHẾ ĐỘ CHẠY (Nằm ngoài block loki:)
+# Ép chế độ chạy Single Binary
 deploymentMode: SingleBinary
 
-# QUAN TRỌNG: Tắt các thành phần Scalable để không bị dính lỗi validate.yaml
+# SỬA LỖI VALIDATE: Bật Canary nhưng cấu hình tối giản
+lokiCanary:
+  enabled: true
+
+# Tắt các thành phần Scalable để tránh lỗi Object Storage
 backend:
   replicas: 0
 read:
@@ -33,18 +32,16 @@ read:
 write:
   replicas: 0
 
-# Tắt Gateway và các cache để tránh lỗi Pending trên Kind
+# Cấu hình Single Binary
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: false # Dùng emptyDir để không bị kẹt Pending do thiếu PV
+
+# Tắt các thành phần không cần thiết khác
 gateway:
   enabled: false
 chunksCache:
   enabled: false
 resultsCache:
   enabled: false
-lokiCanary:
-  enabled: false
-
-# Sử dụng emptyDir nếu bạn không muốn cấu hình PersistentVolume (PV) cho Lab
-singleBinary:
-  replicas: 1
-  persistence:
-    enabled: false # Chạy Lab tạm thời, dữ liệu mất khi xóa Pod
