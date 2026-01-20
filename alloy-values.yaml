@@ -1,0 +1,32 @@
+alloy:
+  config: |
+    // Thu thập logs từ các container trong K8S
+    loki.source.kubernetes "pod_logs" {
+      targets = discovery.kubernetes.pod.targets
+      forward_to = [loki.write.local.receiver]
+    }
+
+    loki.write "local" {
+      endpoint { url = "http://loki-gateway.default.svc.cluster.local/loki/api/v1/push" }
+    }
+
+    // Nhận dữ liệu OTLP từ ứng dụng
+    otelcol.receiver.otlp "default" {
+      grpc { endpoint = "0.0.0.0:4317" }
+      output {
+        traces  = [otelcol.exporter.otlp.tempo.input]
+        metrics = [otelcol.exporter.prometheus.mimir.input]
+      }
+    }
+
+    otelcol.exporter.otlp "tempo" {
+      client { endpoint = "tempo:4317" }
+    }
+
+    otelcol.exporter.prometheus "mimir" {
+      forward_to = [prometheus.remote_write.mimir.receiver]
+    }
+
+    prometheus.remote_write "mimir" {
+      endpoint { url = "http://mimir-distributed-query-frontend.default.svc.cluster.local/prometheus/api/v1/push" }
+    }
