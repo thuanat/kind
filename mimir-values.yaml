@@ -1,3 +1,12 @@
+# Chế độ chạy
+deploymentMode: SingleBinary
+
+# Tắt các thành phần phụ đi kèm
+minio:
+  enabled: false
+skip_se_initialization: true # Bỏ qua khởi tạo doanh nghiệp
+
+# Cấu hình Mimir Core
 mimir:
   structuredConfig:
     multitenancy_enabled: false
@@ -17,12 +26,7 @@ mimir:
       filesystem:
         dir: /data/mimir/rules
 
-deploymentMode: SingleBinary
-
-# Tắt hoàn toàn MinIO và các thành phần phân tán
-minio:
-  enabled: false
-
+# Ép tất cả các replica khác về 0 để tránh Helm tự tạo lại
 ingester:
   replicas: 0
 querier:
