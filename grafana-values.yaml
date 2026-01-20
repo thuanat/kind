@@ -1,0 +1,9 @@
+service:
+  type: NodePort
+  nodePort: 30000
+
+adminPassword: "admin"
+
+persistence:
+  enabled: true
+  size: 2Gi

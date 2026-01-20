@@ -17,10 +17,12 @@ mimir:
       filesystem:
         dir: /data/mimir/rules
 
-# Quan trọng: Chuyển sang chế độ Single Binary
 deploymentMode: SingleBinary
 
-# Tắt các thành phần của bản Distributed để giải phóng tài nguyên
+# Tắt hoàn toàn MinIO và các thành phần phân tán
+minio:
+  enabled: false
+
 ingester:
   replicas: 0
 querier:
@@ -42,6 +44,5 @@ query_scheduler:
 overrides_exporter:
   replicas: 0
 
-# Cấu hình gateway để truy cập tập trung
 gateway:
   enabled: true
