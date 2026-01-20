@@ -46,13 +46,8 @@ loki.write "loki" {
 }
 
 // ======================================================
-// TRACES → TEMPO (ALLOY-NATIVE)
+// TRACES → TEMPO (ALLOY CÁCH ĐÚNG)
 // ======================================================
-otelcol.receiver.otlp "otlp" {
-  grpc {}
-  http {}
-}
-
 tempo.write "tempo" {
   endpoint = "tempo:4317"
   tls {
@@ -60,7 +55,11 @@ tempo.write "tempo" {
   }
 }
 
-// NỐI OTLP RECEIVER → TEMPO
-otelcol.receiver.otlp.otlp.forward_to = [
-  tempo.write.tempo.receiver,
-]
+otelcol.receiver.otlp "otlp" {
+  grpc {}
+  http {}
+
+  forward_to = [
+    tempo.write.tempo.receiver,
+  ]
+}
