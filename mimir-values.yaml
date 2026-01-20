@@ -1,12 +1,5 @@
-# Cấu hình Single Binary cho Mimir
 deploymentMode: SingleBinary
 
-# TẮT TẬN GỐC CÁC THÀNH PHẦN PHỤ
-minio: {enabled: false}
-nginx: {enabled: false}
-enterprise: {enabled: false}
-
-# Cấu hình Mimir Core
 mimir:
   structuredConfig:
     multitenancy_enabled: false
@@ -26,7 +19,21 @@ mimir:
       filesystem:
         dir: /data/mimir/rules
 
-# Tắt toàn bộ pods của bản Distributed
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: false
+  # Sửa lỗi Read-only bằng emptyDir
+  extraVolumes:
+    - name: storage
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: storage
+      mountPath: /data
+
+# Tắt toàn bộ các thành phần Distributed gây tốn tài nguyên
+minio: {enabled: false}
+nginx: {enabled: false}
 ingester: {replicas: 0}
 querier: {replicas: 0}
 query_frontend: {replicas: 0}

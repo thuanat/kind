@@ -44,3 +44,10 @@ helm upgrade --install loki grafana/loki \
   helm upgrade --install grafana grafana/grafana \
   --set service.type=NodePort \
   --set service.nodePort=30000
+
+  # Fix CoreDNS
+  # Lệnh này ép CoreDNS sử dụng DNS Google thay vì bị loop bởi DNS của máy Host
+kubectl -n kube-system patch configmap coredns --type merge -p '{"data":{"Corefile":".:53 {\n    errors\n    health\n    ready\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    prometheus :9153\n    forward . 8.8.8.8\n    cache 30\n    loop\n    reload\n    loadbalance\n}"}}'
+
+# Khởi động lại CoreDNS để nhận cấu hình mới
+kubectl rollout restart deployment coredns -n kube-system
