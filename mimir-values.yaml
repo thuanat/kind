@@ -1,5 +1,6 @@
 mimir:
   structuredConfig:
+    multitenancy_enabled: false
     common:
       storage:
         backend: filesystem
@@ -15,3 +16,32 @@ mimir:
       backend: filesystem
       filesystem:
         dir: /data/mimir/rules
+
+# Quan trọng: Chuyển sang chế độ Single Binary
+deploymentMode: SingleBinary
+
+# Tắt các thành phần của bản Distributed để giải phóng tài nguyên
+ingester:
+  replicas: 0
+querier:
+  replicas: 0
+query_frontend:
+  replicas: 0
+distributor:
+  replicas: 0
+compactor:
+  replicas: 0
+store_gateway:
+  replicas: 0
+ruler:
+  replicas: 0
+alertmanager:
+  replicas: 0
+query_scheduler:
+  replicas: 0
+overrides_exporter:
+  replicas: 0
+
+# Cấu hình gateway để truy cập tập trung
+gateway:
+  enabled: true
