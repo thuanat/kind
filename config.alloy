@@ -7,7 +7,7 @@ logging {
 }
 
 // ======================================================
-// KUBERNETES DISCOVERY (BẮT BUỘC)
+// KUBERNETES DISCOVERY
 // ======================================================
 discovery.kubernetes "pods" {
   role = "pod"
@@ -46,26 +46,21 @@ loki.write "loki" {
 }
 
 // ======================================================
-// TRACES → TEMPO
+// TRACES → TEMPO (CÁCH ĐÚNG TRONG ALLOY)
 // ======================================================
 otelcol.receiver.otlp "otlp" {
   grpc {}
   http {}
 }
 
-otelcol.processor.batch "batch" {}
-
-otelcol.exporter.otlp "tempo" {
-  client {
-    endpoint = "tempo:4317"
-    tls {
-      insecure = true
-    }
+tempo.write "tempo" {
+  endpoint = "tempo:4317"
+  tls {
+    insecure = true
   }
 }
 
-otelcol.pipeline "traces" {
-  receivers  = [otelcol.receiver.otlp.otlp]
-  processors = [otelcol.processor.batch.batch]
-  exporters  = [otelcol.exporter.otlp.tempo]
-}
+// KẾT NỐI OTLP → TEMPO
+otelcol.receiver.otlp.otlp.forward_to = [
+  tempo.write.tempo.receiver
+]
