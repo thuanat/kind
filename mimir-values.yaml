@@ -1,18 +1,6 @@
+# FILE: mimir-clean.yaml
 deploymentMode: SingleBinary
 
-# TẮT TOÀN BỘ dependency (Quan trọng)
-minio:
-  enabled: false
-gateway:
-  enabled: false
-nginx:
-  enabled: false
-kafka:
-  enabled: false
-rollout_operator:
-  enabled: false
-
-# Cấu hình Mimir
 mimir:
   structuredConfig:
     multitenancy_enabled: false
@@ -32,16 +20,16 @@ mimir:
       filesystem:
         dir: /data/mimir/rules
 
-# Cấu hình Pod Single Binary
 singleBinary:
   replicas: 1
   resources:
+    limits:
+      memory: 2Gi
     requests:
       cpu: 100m
       memory: 512Mi
   persistence:
     enabled: false
-  # Mount ổ đĩa ảo để tránh lỗi Read-only
   extraVolumes:
     - name: storage
       emptyDir: {}
@@ -49,6 +37,17 @@ singleBinary:
     - name: storage
       mountPath: /data
 
+# --- PHẦN QUAN TRỌNG NHẤT: TẮT HẾT CÁC MODULE PHỤ ---
+minio:
+  enabled: false
+gateway:
+  enabled: false, replicas: 0
+nginx:
+  enabled: false
+kafka:
+  enabled: false
+rollout_operator:
+  enabled: false
 # Tắt các thành phần Distributed
 ingester: { replicas: 0 }
 querier: { replicas: 0 }
