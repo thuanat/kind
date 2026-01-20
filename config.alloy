@@ -46,7 +46,7 @@ loki.write "loki" {
 }
 
 // ======================================================
-// TRACES → TEMPO (CÁCH ĐÚNG TRONG ALLOY)
+// TRACES → TEMPO (ALLOY-NATIVE)
 // ======================================================
 otelcol.receiver.otlp "otlp" {
   grpc {}
@@ -60,7 +60,7 @@ tempo.write "tempo" {
   }
 }
 
-// KẾT NỐI OTLP → TEMPO
+// NỐI OTLP RECEIVER → TEMPO
 otelcol.receiver.otlp.otlp.forward_to = [
-  tempo.write.tempo.receiver
+  tempo.write.tempo.receiver,
 ]
