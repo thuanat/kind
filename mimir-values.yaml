@@ -1,7 +1,9 @@
 deploymentMode: SingleBinary
 
+# Đây là phần tương ứng với nội dung ConfigMap mimir.yaml bạn vừa chạy
 mimir:
   structuredConfig:
+    target: all
     multitenancy_enabled: false
     common:
       storage:
@@ -19,10 +21,12 @@ mimir:
       filesystem:
         dir: /data/mimir/rules
 
+# Cấu hình cho Pod duy nhất
 singleBinary:
   replicas: 1
   persistence:
     enabled: false
+  # Quan trọng: Dùng emptyDir để tránh lỗi quyền ghi (Read-only) trên Kind
   extraVolumes:
     - name: storage
       emptyDir: {}
@@ -30,9 +34,22 @@ singleBinary:
     - name: storage
       mountPath: /data
 
-# Vô hiệu hóa tất cả các chart con (dependencies)
+# VÔ HIỆU HÓA triệt để các thành phần Distributed để tiết kiệm RAM
 minio: {enabled: false}
 nginx: {enabled: false}
 gateway: {enabled: false}
 kafka: {enabled: false}
 rollout_operator: {enabled: false}
+enterprise: {enabled: false}
+
+# Tắt các service rời rạc khác
+ingester: {replicas: 0}
+querier: {replicas: 0}
+query_frontend: {replicas: 0}
+distributor: {replicas: 0}
+compactor: {replicas: 0}
+store_gateway: {replicas: 0}
+ruler: {replicas: 0}
+alertmanager: {replicas: 0}
+query_scheduler: {replicas: 0}
+overrides_exporter: {replicas: 0}
