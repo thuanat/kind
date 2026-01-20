@@ -1,15 +1,10 @@
-# Chế độ chạy
+# Cấu hình Single Binary cho Mimir
 deploymentMode: SingleBinary
 
-# TẮT CÁC THÀNH PHẦN PHỤ (Nằm ở cấp cao nhất)
-minio:
-  enabled: false
-nginx:
-  enabled: false
-enterprise:
-  enabled: false
-mimir-distributed: # Một số version chart yêu cầu key này
-  enabled: false
+# TẮT TẬN GỐC CÁC THÀNH PHẦN PHỤ
+minio: {enabled: false}
+nginx: {enabled: false}
+enterprise: {enabled: false}
 
 # Cấu hình Mimir Core
 mimir:
@@ -31,24 +26,14 @@ mimir:
       filesystem:
         dir: /data/mimir/rules
 
-# Ép tất cả replicas về 0 (để chắc chắn)
-ingester:
-  replicas: 0
-querier:
-  replicas: 0
-query_frontend:
-  replicas: 0
-distributor:
-  replicas: 0
-compactor:
-  replicas: 0
-store_gateway:
-  replicas: 0
-ruler:
-  replicas: 0
-alertmanager:
-  replicas: 0
-query_scheduler:
-  replicas: 0
-overrides_exporter:
-  replicas: 0
+# Tắt toàn bộ pods của bản Distributed
+ingester: {replicas: 0}
+querier: {replicas: 0}
+query_frontend: {replicas: 0}
+distributor: {replicas: 0}
+compactor: {replicas: 0}
+store_gateway: {replicas: 0}
+ruler: {replicas: 0}
+alertmanager: {replicas: 0}
+query_scheduler: {replicas: 0}
+overrides_exporter: {replicas: 0}
