@@ -7,10 +7,20 @@ logging {
 }
 
 // ======================================================
-// KUBERNETES DISCOVERY
+// METRICS → MIMIR (Prometheus native)
 // ======================================================
-discovery.kubernetes "pods" {
-  role = "pod"
+prometheus.scrape "kubernetes_nodes" {
+  targets = [{
+    __address__ = "kubernetes.default.svc:443",
+  }]
+
+  forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "http://mimir-gateway/api/v1/push"
+  }
 }
 
 // ======================================================
@@ -24,15 +34,15 @@ loki.source.kubernetes "pods" {
 loki.process "k8s" {
   stage.labels {
     values = {
-      cluster = "k8s-lab",
+      cluster = "k8s-lab"
     }
   }
 
   stage.labels {
     values = {
-      namespace = "kubernetes_namespace_name",
-      pod       = "kubernetes_pod_name",
-      container = "kubernetes_container_name",
+      namespace = "kubernetes_namespace_name"
+      pod       = "kubernetes_pod_name"
+      container = "kubernetes_container_name"
     }
   }
 
@@ -46,8 +56,19 @@ loki.write "loki" {
 }
 
 // ======================================================
-// TRACES → TEMPO (OTEL-COMPAT, CÁCH ĐÚNG)
+// TRACES → TEMPO (OTELCOL PIPELINE – CÁCH DUY NHẤT ĐÚNG)
 // ======================================================
+
+// Receiver
+otelcol.receiver.otlp "otlp" {
+  grpc {}
+  http {}
+}
+
+// Processor
+otelcol.processor.batch "batch" {}
+
+// Exporter
 otelcol.exporter.otlp "tempo" {
   client {
     endpoint = "tempo:4317"
@@ -57,11 +78,9 @@ otelcol.exporter.otlp "tempo" {
   }
 }
 
-otelcol.receiver.otlp "otlp" {
-  grpc {}
-  http {}
-
-  forward_to = [
-    otelcol.exporter.otlp.tempo.receiver,
-  ]
+// PIPELINE (BẮT BUỘC)
+otelcol.pipeline "traces" {
+  receivers  = [otelcol.receiver.otlp.otlp]
+  processors = [otelcol.processor.batch.batch]
+  exporters  = [otelcol.exporter.otlp.tempo]
 }
