@@ -3,10 +3,7 @@ deploymentMode: SingleBinary
 loki:
   auth_enabled: false
   
-  # Cấu hình lưu trữ
-  storage:
-    type: 'filesystem'
-  
+  # Ép toàn bộ lưu trữ vào thư mục nội bộ của Pod
   commonConfig:
     replication_factor: 1
     path_prefix: /var/loki
@@ -14,6 +11,9 @@ loki:
       filesystem:
         chunks_directory: /var/loki/chunks
         rules_directory: /var/loki/rules
+
+  storage:
+    type: 'filesystem'
 
   schemaConfig:
     configs:
@@ -25,26 +25,28 @@ loki:
           prefix: index_
           period: 24h
 
-# Sửa lỗi Permission và ép chạy
+# Cấu hình Pod Single Binary
 singleBinary:
   replicas: 1
   persistence:
-    enabled: false # Dùng emptyDir để tránh lỗi ổ đĩa trên Kind
-  extraArgs:
-    - "-config.expand-env=true"
-
-# Tắt toàn bộ các thành phần gây nhiễu
-backend: {replicas: 0}
-read: {replicas: 0}
-write: {replicas: 0}
-gateway: {enabled: false}
-chunksCache: {enabled: false}
-resultsCache: {enabled: false}
-lokiCanary: {enabled: true}
-
-# Cấp quyền ghi vào /var/loki
+    enabled: false # Quan trọng cho Kind: Không dùng PV để tránh lỗi kẹt
+  
+# Sửa lỗi Permission Denied
 lokiInterface:
   securityContext:
     fsGroup: 10001
     runAsGroup: 10001
     runAsUser: 10001
+
+# Vượt qua lỗi Validate của Helm
+lokiCanary:
+  enabled: true
+
+# Tắt sạch các thành phần gây tốn tài nguyên và lỗi 502
+gateway:
+  enabled: false
+backend: {replicas: 0}
+read: {replicas: 0}
+write: {replicas: 0}
+chunksCache: {enabled: false}
+resultsCache: {enabled: false}
