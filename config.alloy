@@ -1,0 +1,98 @@
+// =====================
+// OTLP RECEIVER
+// =====================
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+}
+
+// =====================
+// LOGS → LOKI
+// =====================
+loki.source.kubernetes "k8s" {
+  forward_to = [loki.process.k8s.receiver]
+}
+
+loki.process "k8s" {
+  receiver {
+    forward_to = [loki.write.loki.receiver]
+  }
+
+  stage.static_labels {
+    values = {
+      cluster = "k8s-lab"
+    }
+  }
+
+  stage.labels {
+    values = {
+      namespace = "kubernetes_namespace_name"
+      pod       = "kubernetes_pod_name"
+      container = "kubernetes_container_name"
+    }
+  }
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// =====================
+// METRICS → MIMIR
+// =====================
+otelcol.processor.batch "metrics" {}
+
+otelcol.exporter.prometheusremotewrite "mimir" {
+  endpoint = "http://mimir-gateway/api/v1/push"
+}
+
+// =====================
+// TRACES → TEMPO
+// =====================
+otelcol.processor.batch "traces" {}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}
+
+// =====================
+// OTLP LOGS → LOKI
+// =====================
+otelcol.exporter.loki "loki_otlp" {
+  endpoint = "http://loki:3100/loki/api/v1/push"
+}
+
+// =====================
+// PIPELINES
+// =====================
+otelcol.service "default" {
+  pipelines {
+    metrics {
+      receivers  = [otelcol.receiver.otlp.default]
+      processors = [otelcol.processor.batch.metrics]
+      exporters  = [otelcol.exporter.prometheusremotewrite.mimir]
+    }
+
+    traces {
+      receivers  = [otelcol.receiver.otlp.default]
+      processors = [otelcol.processor.batch.traces]
+      exporters  = [otelcol.exporter.otlp.tempo]
+    }
+
+    logs {
+      receivers  = [otelcol.receiver.otlp.default]
+      exporters  = [otelcol.exporter.loki.loki_otlp]
+    }
+  }
+}
