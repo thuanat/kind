@@ -1,6 +1,6 @@
-// =====================
-// OTLP RECEIVER
-// =====================
+// ======================================================
+// OTLP RECEIVER (Logs / Metrics / Traces)
+// ======================================================
 otelcol.receiver.otlp "default" {
   grpc {
     endpoint = "0.0.0.0:4317"
@@ -10,9 +10,9 @@ otelcol.receiver.otlp "default" {
   }
 }
 
-// =====================
-// LOGS → LOKI
-// =====================
+// ======================================================
+// LOKI – KUBERNETES LOGS
+// ======================================================
 loki.source.kubernetes "k8s" {
   forward_to = [loki.process.k8s.receiver]
 }
@@ -24,15 +24,15 @@ loki.process "k8s" {
 
   stage.static_labels {
     values = {
-      cluster = "k8s-lab"
+      cluster = "k8s-lab",
     }
   }
 
   stage.labels {
     values = {
-      namespace = "kubernetes_namespace_name"
-      pod       = "kubernetes_pod_name"
-      container = "kubernetes_container_name"
+      namespace = "kubernetes_namespace_name",
+      pod       = "kubernetes_pod_name",
+      container = "kubernetes_container_name",
     }
   }
 }
@@ -43,20 +43,21 @@ loki.write "loki" {
   }
 }
 
-// =====================
-// METRICS → MIMIR
-// =====================
-otelcol.processor.batch "metrics" {}
+// ======================================================
+// OTEL PROCESSORS
+// ======================================================
+otelcol.processor.batch "default" {}
 
+// ======================================================
+// EXPORTERS
+// ======================================================
+
+// ---- Metrics → Mimir
 otelcol.exporter.prometheusremotewrite "mimir" {
   endpoint = "http://mimir-gateway/api/v1/push"
 }
 
-// =====================
-// TRACES → TEMPO
-// =====================
-otelcol.processor.batch "traces" {}
-
+// ---- Traces → Tempo
 otelcol.exporter.otlp "tempo" {
   client {
     endpoint = "tempo:4317"
@@ -66,27 +67,25 @@ otelcol.exporter.otlp "tempo" {
   }
 }
 
-// =====================
-// OTLP LOGS → LOKI
-// =====================
+// ---- OTLP Logs → Loki
 otelcol.exporter.loki "loki_otlp" {
   endpoint = "http://loki:3100/loki/api/v1/push"
 }
 
-// =====================
-// PIPELINES
-// =====================
+// ======================================================
+// OTEL SERVICE (ONLY ONE – BẮT BUỘC)
+// ======================================================
 otelcol.service "default" {
   pipelines {
     metrics {
       receivers  = [otelcol.receiver.otlp.default]
-      processors = [otelcol.processor.batch.metrics]
+      processors = [otelcol.processor.batch.default]
       exporters  = [otelcol.exporter.prometheusremotewrite.mimir]
     }
 
     traces {
       receivers  = [otelcol.receiver.otlp.default]
-      processors = [otelcol.processor.batch.traces]
+      processors = [otelcol.processor.batch.default]
       exporters  = [otelcol.exporter.otlp.tempo]
     }
 
