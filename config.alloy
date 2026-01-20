@@ -46,12 +46,14 @@ loki.write "loki" {
 }
 
 // ======================================================
-// TRACES → TEMPO (ALLOY CÁCH ĐÚNG)
+// TRACES → TEMPO (OTEL-COMPAT, CÁCH ĐÚNG)
 // ======================================================
-tempo.write "tempo" {
-  endpoint = "tempo:4317"
-  tls {
-    insecure = true
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
   }
 }
 
@@ -60,6 +62,6 @@ otelcol.receiver.otlp "otlp" {
   http {}
 
   forward_to = [
-    tempo.write.tempo.receiver,
+    otelcol.exporter.otlp.tempo.receiver,
   ]
 }
