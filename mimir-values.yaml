@@ -1,5 +1,6 @@
 deploymentMode: SingleBinary
 
+# Phần cấu hình cốt lõi của Mimir
 mimir:
   structuredConfig:
     multitenancy_enabled: false
@@ -19,7 +20,7 @@ mimir:
       filesystem:
         dir: /data/mimir/rules
 
-# Ép Pod Single Binary chạy và có quyền ghi data
+# Ép Pod chạy Single và xử lý lỗi Read-only
 singleBinary:
   replicas: 1
   persistence:
@@ -31,10 +32,17 @@ singleBinary:
     - name: storage
       mountPath: /data
 
-# VÔ HIỆU HÓA tất cả các thành phần distributed (quan trọng)
-mimir-distributed:
-  enabled: false # Tắt chart phụ nếu có
-nginx: { enabled: false }
+# TẮT TOÀN BỘ CÁC THÀNH PHẦN DISTRIBUTED
+# Đây là phần quan trọng để không còn thấy gateway hay kafka
+ingester: { replicas: 0 }
+querier: { replicas: 0 }
+query_frontend: { replicas: 0 }
+distributor: { replicas: 0 }
+compactor: { replicas: 0 }
+store_gateway: { replicas: 0 }
+ruler: { replicas: 0 }
+alertmanager: { replicas: 0 }
+query_scheduler: { replicas: 0 }
+overrides_exporter: { replicas: 0 }
 gateway: { enabled: false }
-kafka: { enabled: false }
-minio: { enabled: false }
+nginx: { enabled: false }
