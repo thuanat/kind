@@ -1,5 +1,24 @@
 deploymentMode: SingleBinary
 
+# Tắt tất cả các module rời rạc
+ingester: { replicas: 0 }
+querier: { replicas: 0 }
+query_frontend: { replicas: 0 }
+distributor: { replicas: 0 }
+compactor: { replicas: 0 }
+store_gateway: { replicas: 0 }
+ruler: { replicas: 0 }
+alertmanager: { replicas: 0 }
+query_scheduler: { replicas: 0 }
+overrides_exporter: { replicas: 0 }
+
+# Tắt các dependency cồng kềnh
+minio: { enabled: false }
+gateway: { enabled: false }
+nginx: { enabled: false }
+kafka: { enabled: false }
+rollout_operator: { enabled: false }
+
 mimir:
   structuredConfig:
     multitenancy_enabled: false
@@ -29,11 +48,3 @@ singleBinary:
   extraVolumeMounts:
     - name: storage
       mountPath: /data
-
-# TẮT TOÀN BỘ CÁC THÀNH PHẦN KHÁC
-minio: {enabled: false}
-nginx: {enabled: false}
-gateway: {enabled: false}
-kafka: {enabled: false}
-rollout_operator: {enabled: false}
-enterprise: {enabled: false}
