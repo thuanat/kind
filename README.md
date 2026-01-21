@@ -128,6 +128,8 @@ EOF
 
 # apply config.alloy
 
+kubectl apply -f alloy-daemonset.yaml
+
 kubectl create configmap alloy-config-final --from-file=config.alloy=config.alloy --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl rollout restart ds alloy
@@ -181,4 +183,29 @@ spec:
                     time.sleep(0.1)
             time.sleep(1)
         "
+EOF
+
+
+
+
+
+# Xóa bỏ service cũ đang bị lỗi selector
+kubectl delete svc alloy
+
+# Tạo lại service mới với selector tối giản (chỉ 1 nhãn)
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: alloy
+spec:
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: ui
+      port: 12345
+      targetPort: 12345
+  selector:
+    app.kubernetes.io/name: alloy
 EOF

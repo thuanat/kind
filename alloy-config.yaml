@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config-final
+  namespace: default
+data:
+  config.alloy: |
+    discovery.kubernetes "all_pods" {
+      role = "pod"
+    }
+
+    // --- THU THẬP LOGS ---
+    loki.source.kubernetes "logs_collector" {
+      targets    = discovery.kubernetes.all_pods.targets
+      forward_to = [loki.relabel.pod_logs.receiver]
+    }
+
+    loki.relabel "pod_logs" {
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "service_name"
+      }
+      forward_to = [loki.process.extract_metadata.receiver]
+    }
+
+    loki.process "extract_metadata" {
+      forward_to = [loki.write.loki_endpoint.receiver]
+
+      // Thử parse JSON trước (dành cho log hệ thống)
+      stage.json {
+        expressions = { "msg" = "msg", "level" = "level" }
+      }
+
+      // Sau đó parse Logfmt (dành cho App Simulator)
+      // Nếu lỗi, nó sẽ im lặng đi tiếp thay vì văng error log
+      stage.logfmt {
+        mapping = {
+          "trace_id" = "",
+          "level"    = "",
+          "msg"      = "",
+        }
+      }
+
+      stage.labels {
+        values = { "level" = "level" }
+      }
+    }
+
+    loki.write "loki_endpoint" {
+      endpoint {
+        url = "http://loki:3100/loki/api/v1/push"
+      }
+    }
+
+    // --- THU THẬP TRACES ---
+    otelcol.receiver.otlp "otlp_receiver" {
+      grpc {
+        endpoint = "0.0.0.0:4317"
+      }
+      http {
+        endpoint = "0.0.0.0:4318"
+      }
+      output {
+        traces = [otelcol.exporter.otlp.tempo_endpoint.input]
+      }
+    }
+
+    otelcol.exporter.otlp "tempo_endpoint" {
+      client {
+        endpoint = "tempo:4317"
+        tls {
+          insecure = true
+        }
+      }
+    }
