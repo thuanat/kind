@@ -52,8 +52,15 @@ spec:
             - --storage.path=/var/lib/alloy/data
             - /etc/alloy/config.alloy
             - --server.http.listen-addr=0.0.0.0:12345
+          ports:
+            - name: http-ui
+              containerPort: 12345
+            - name: otlp-grpc
+              containerPort: 4317 # Cổng nhận Trace từ Python App
+            - name: otlp-http
+              containerPort: 4318
           securityContext:
-            runAsUser: 0 # Bắt buộc phải là root để đọc log trên Kind
+            runAsUser: 0
           volumeMounts:
             - mountPath: /etc/alloy
               name: config
@@ -64,11 +71,11 @@ spec:
               name: varlibdockercontainers
               readOnly: true
             - mountPath: /var/lib/alloy/data
-              name: storage # Lưu trữ file positions tránh đọc lại log cũ khi restart nhẹ
+              name: storage
       volumes:
         - name: config
           configMap:
-            name: alloy-config-final
+            name: alloy-config-final # Đảm bảo tên này khớp với lệnh create configmap của bạn
         - name: varlog
           hostPath:
             path: /var/log
@@ -76,4 +83,4 @@ spec:
           hostPath:
             path: /var/lib/docker/containers
         - name: storage
-          emptyDir: {} # Reset lại "vị trí đã đọc" mỗi khi xóa hẳn DaemonSet
+          emptyDir: {}
