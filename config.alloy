@@ -57,6 +57,10 @@ loki.relabel "pod_logs" {
     replacement  = "kubernetes-logs"
     target_label = "job"
   }
+  rule {
+    replacement  = "my-simulator"
+    target_label = "app"
+  }
   forward_to = [loki.write.loki_endpoint.receiver]
 }
 
