@@ -191,9 +191,17 @@ EOF
 
 #Xóa sạch Service cũ: kubectl delete svc alloy
 
-#Apply ConfigMap: kubectl apply -f alloy-config.yaml
+#Apply ConfigMap: 
 
-#Apply DaemonSet & Service: kubectl apply -f alloy-daemonset.yaml
+kubectl apply -f alloy-config.yaml
+
+#Apply DaemonSet & Service:
+
+#Restart
+
+kubectl apply -f alloy-daemonset.yaml
+
+kubectl rollout restart daemonset alloy
 
 #Restart App: kubectl delete pod opentelemetry-app (để nó kết nối lại vào Endpoint mới).
 
@@ -202,26 +210,3 @@ Chạy kubectl get endpoints alloy. Nếu thấy IP là THÀNH CÔNG.
 
 Chạy kubectl logs opentelemetry-app. Nếu không thấy lỗi UNAVAILABLE là THÀNH CÔNG.
 
-
-
-
-# Xóa bỏ service cũ đang bị lỗi selector
-kubectl delete svc alloy
-
-# Tạo lại service mới với selector tối giản (chỉ 1 nhãn)
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  name: alloy
-spec:
-  ports:
-    - name: otlp-grpc
-      port: 4317
-      targetPort: 4317
-    - name: ui
-      port: 12345
-      targetPort: 12345
-  selector:
-    app.kubernetes.io/name: alloy
-EOF

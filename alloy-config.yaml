@@ -22,19 +22,9 @@ data:
 
     prometheus.relabel "metrics_filter" {
       forward_to = [prometheus.remote_write.mimir_endpoint.receiver]
-      
-      rule {
-        source_labels = ["__meta_kubernetes_namespace"]
-        target_label  = "namespace"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "pod"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "service_name"
-      }
+      rule { source_labels = ["__meta_kubernetes_namespace"]; target_label = "namespace" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "pod" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "service_name" }
     }
 
     prometheus.remote_write "mimir_endpoint" {
@@ -53,27 +43,16 @@ data:
     }
 
     loki.relabel "pod_logs" {
-      rule {
-        source_labels = ["__meta_kubernetes_namespace"]
-        target_label  = "namespace"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "pod"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "service_name"
-      }
+      rule { source_labels = ["__meta_kubernetes_namespace"]; target_label = "namespace" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "pod" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "service_name" }
       forward_to = [loki.process.extract_metadata.receiver]
     }
 
     loki.process "extract_metadata" {
       forward_to = [loki.write.loki_endpoint.receiver]
 
-      // --- LOGIC XỬ LÝ (SỬA LỖI SYNTAX) ---
-
-      // 1. Xử lý JSON: Chọn các log có namespace (tất cả) VÀ bắt đầu bằng {
+      // 1. Xử lý JSON
       stage.match {
         selector = "{namespace!=\"\"} |~ \"^\\\\{\""
         stage.json {
@@ -81,7 +60,7 @@ data:
         }
       }
 
-      // 2. Xử lý Logfmt: Chọn các log có namespace VÀ có dấu = VÀ KHÔNG bắt đầu bằng {
+      // 2. Xử lý Logfmt (Dành cho App Simulator)
       stage.match {
         selector = "{namespace!=\"\"} |~ \"=\" !~ \"^\\\\{\""
         stage.logfmt {
@@ -93,7 +72,15 @@ data:
         }
       }
 
-      // 3. Gán nhãn level
+      // 3. FIX LỖI "ENTRY TOO FAR BEHIND": 
+      // Ép Loki nhận log với thời gian hiện tại nếu log cũ bị từ chối
+      stage.timestamp {
+        source = "time"
+        format = "RFC3339"
+        action_on_failure = "skip"
+      }
+
+      // 4. Gán nhãn level
       stage.labels {
         values = {
           "level" = "level",
@@ -111,12 +98,8 @@ data:
     // 4. TRACES (Tempo)
     // =====================================================
     otelcol.receiver.otlp "otlp_receiver" {
-      grpc {
-        endpoint = "0.0.0.0:4317"
-      }
-      http {
-        endpoint = "0.0.0.0:4318"
-      }
+      grpc { endpoint = "0.0.0.0:4317" }
+      http { endpoint = "0.0.0.0:4318" }
       output {
         traces = [otelcol.exporter.otlp.tempo_endpoint.input]
       }
@@ -125,8 +108,6 @@ data:
     otelcol.exporter.otlp "tempo_endpoint" {
       client {
         endpoint = "tempo:4317"
-        tls {
-          insecure = true
-        }
+        tls { insecure = true }
       }
     }
