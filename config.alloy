@@ -1,5 +1,5 @@
 // =====================================================
-// 1. DISCOVERY: Tìm các Pod đang chạy trong Kind
+// 1. DISCOVERY: Tìm các Pod đang chạy trong Cluster
 // =====================================================
 discovery.kubernetes "all_pods" {
   role = "pod"
@@ -33,17 +33,17 @@ prometheus.remote_write "mimir_endpoint" {
 }
 
 // =====================================================
-// 3. LOGS: Gắn nhãn chuẩn trước khi đẩy về Loki
+// 3. LOGS: Thu thập, Gắn nhãn và đẩy về Loki
 // =====================================================
 loki.source.kubernetes "logs_collector" {
   targets    = discovery.kubernetes.all_pods.targets
   forward_to = [loki.relabel.pod_logs.receiver]
+  // Thuộc tính này nằm ở đây là đúng chuẩn
+  tail_from_end = true
 }
 
-// KHỐI QUAN TRỌNG: Giúp bạn lọc log theo Pod, Container, Namespace trên Grafana
 loki.relabel "pod_logs" {
   forward_to = [loki.write.loki_endpoint.receiver]
-  tail_from_end = true
 
   rule {
     source_labels = ["__meta_kubernetes_namespace"]
@@ -60,6 +60,11 @@ loki.relabel "pod_logs" {
   rule {
     source_labels = ["__meta_kubernetes_pod_node_name"]
     target_label  = "node_name"
+  }
+  // Gắn thêm nhãn job cố định để dễ quản lý
+  rule {
+    replacement  = "kubernetes-logs"
+    target_label = "job"
   }
 }
 
