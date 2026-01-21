@@ -9,6 +9,7 @@ data:
       role = "pod"
     }
 
+    // --- METRICS ---
     prometheus.scrape "metrics_collector" {
       targets    = discovery.kubernetes.all_pods.targets
       forward_to = [prometheus.relabel.metrics_filter.receiver]
@@ -16,18 +17,9 @@ data:
 
     prometheus.relabel "metrics_filter" {
       forward_to = [prometheus.remote_write.mimir_endpoint.receiver]
-      rule {
-        source_labels = ["__meta_kubernetes_namespace"]
-        target_label  = "namespace"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "pod"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "service_name"
-      }
+      rule { source_labels = ["__meta_kubernetes_namespace"]; target_label = "namespace" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "pod" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "service_name" }
     }
 
     prometheus.remote_write "mimir_endpoint" {
@@ -37,42 +29,50 @@ data:
       }
     }
 
+    // --- LOGS ---
     loki.source.kubernetes "logs_collector" {
       targets    = discovery.kubernetes.all_pods.targets
       forward_to = [loki.relabel.pod_logs.receiver]
     }
 
     loki.relabel "pod_logs" {
-      rule {
-        source_labels = ["__meta_kubernetes_namespace"]
-        target_label  = "namespace"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "pod"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "service_name"
-      }
+      rule { source_labels = ["__meta_kubernetes_namespace"]; target_label = "namespace" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "pod" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "service_name" }
       forward_to = [loki.process.extract_metadata.receiver]
     }
 
     loki.process "extract_metadata" {
       forward_to = [loki.write.loki_endpoint.receiver]
 
-      // Giải mã định dạng log K8s trước khi parse logfmt
+      // BƯỚC 1: Giải mã lớp vỏ Kubernetes (CRI)
       stage.cri {}
 
-      stage.logfmt {
-        mapping = {
-          "level"    = "",
-          "msg"      = "",
-          "trace_id" = "",
-          "duration" = "",
+      // BƯỚC 2: PHÂN LOẠI LOG
+      
+      // Trường hợp A: Nếu log là JSON (Bắt đầu bằng dấu { )
+      stage.match {
+        selector = "{namespace!=\"\"} |~ \"^\\\\{\""
+        stage.json {
+          expressions = { "level" = "level", "msg" = "msg", "ts" = "ts" }
         }
       }
 
+      // Trường hợp B: Nếu log là Logfmt (App Python của bạn)
+      stage.match {
+        selector = "{namespace!=\"\"} !~ \"^\\\\{\""
+        stage.logfmt {
+          mapping = {
+            "level"    = "",
+            "msg"      = "",
+            "trace_id" = "",
+            "duration" = "",
+          }
+        }
+      }
+
+      // BƯỚC 3: XỬ LÝ TIMESTAMP (Tránh lỗi 400)
+      // Ép dùng thời gian hệ thống nếu log bị cũ hoặc parse lỗi
       stage.timestamp {
         format = "RFC3339"
         source = "time"
@@ -80,9 +80,7 @@ data:
       }
 
       stage.labels {
-        values = {
-          "level" = "level",
-        }
+        values = { "level" = "level" }
       }
     }
 
@@ -92,6 +90,7 @@ data:
       }
     }
 
+    // --- TRACES ---
     otelcol.receiver.otlp "otlp_receiver" {
       grpc { endpoint = "0.0.0.0:4317" }
       http { endpoint = "0.0.0.0:4318" }
