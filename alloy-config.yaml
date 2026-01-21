@@ -6,14 +6,14 @@ metadata:
 data:
   config.alloy: |
     // =====================================================
-    // 1. DISCOVERY
+    // 1. DISCOVERY (Tìm kiếm các Pod trong Cluster)
     // =====================================================
     discovery.kubernetes "all_pods" {
       role = "pod"
     }
 
     // =====================================================
-    // 2. METRICS (Mimir)
+    // 2. METRICS (Thu thập số liệu cho Mimir)
     // =====================================================
     prometheus.scrape "metrics_collector" {
       targets    = discovery.kubernetes.all_pods.targets
@@ -44,7 +44,7 @@ data:
     }
 
     // =====================================================
-    // 3. LOGS (Loki)
+    // 3. LOGS (Thu thập log cho Loki)
     // =====================================================
     loki.source.kubernetes "logs_collector" {
       targets    = discovery.kubernetes.all_pods.targets
@@ -70,7 +70,7 @@ data:
     loki.process "extract_metadata" {
       forward_to = [loki.write.loki_endpoint.receiver]
 
-      // 1. Xử lý JSON
+      // Giai đoạn 1: Xử lý log định dạng JSON (Log hệ thống)
       stage.match {
         selector = "{namespace!=\"\"} |~ \"^\\\\{\""
         stage.json {
@@ -78,7 +78,7 @@ data:
         }
       }
 
-      // 2. Xử lý Logfmt (Dành cho App Simulator)
+      // Giai đoạn 2: Xử lý log định dạng Logfmt (Log từ python-app)
       stage.match {
         selector = "{namespace!=\"\"} |~ \"=\" !~ \"^\\\\{\""
         stage.logfmt {
@@ -90,14 +90,15 @@ data:
         }
       }
 
-      // 3. FIX LỖI "ENTRY TOO FAR BEHIND"
+      // Giai đoạn 3: FIX LỖI 400 - Ép timestamp về thời gian thực tế
+      // Điều này giúp Loki chấp nhận log ngay cả khi file log trên đĩa bị cũ
       stage.timestamp {
         source = "time"
         format = "RFC3339"
         action_on_failure = "skip"
       }
 
-      // 4. Gán nhãn level
+      // Giai đoạn 4: Đẩy level vào Label để lọc trên Grafana dễ hơn
       stage.labels {
         values = {
           "level" = "level",
@@ -112,7 +113,7 @@ data:
     }
 
     // =====================================================
-    // 4. TRACES (Tempo)
+    // 4. TRACES (Thu thập Trace cho Tempo)
     // =====================================================
     otelcol.receiver.otlp "otlp_receiver" {
       grpc {

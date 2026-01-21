@@ -135,7 +135,7 @@ kubectl create configmap alloy-config-final --from-file=config.alloy=config.allo
 kubectl rollout restart ds alloy
 
 
-# APP:
+# APP Phython
 
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
