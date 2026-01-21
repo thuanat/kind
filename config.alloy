@@ -1,12 +1,12 @@
 // =====================================================
-// 1. DISCOVERY: Tự động tìm kiếm các Pod trong Cluster
+// 1. DISCOVERY: Tìm kiếm các Pod đang chạy
 // =====================================================
 discovery.kubernetes "all_pods" {
   role = "pod"
 }
 
 // =====================================================
-// 2. METRICS (Mimir): Thu thập và đẩy Metric
+// 2. METRICS (Mimir): Thu thập số liệu Prometheus
 // =====================================================
 prometheus.scrape "metrics_collector" {
   targets    = discovery.kubernetes.all_pods.targets
@@ -24,7 +24,7 @@ prometheus.relabel "metrics_filter" {
     source_labels = ["__meta_kubernetes_pod_name"]
     target_label  = "pod"
   }
-  // Thêm nhãn service_name để khớp với Logs và Traces
+  // Thêm nhãn service_name để đồng bộ với Logs và Traces
   rule {
     source_labels = ["__meta_kubernetes_pod_name"]
     target_label  = "service_name"
@@ -39,7 +39,7 @@ prometheus.remote_write "mimir_endpoint" {
 }
 
 // =====================================================
-// 3. LOGS (Loki): Thu thập, bóc tách TraceID và đẩy Log
+// 3. LOGS (Loki): Thu thập và bóc tách TraceID
 // =====================================================
 loki.source.kubernetes "logs_collector" {
   targets    = discovery.kubernetes.all_pods.targets
@@ -59,26 +59,23 @@ loki.relabel "pod_logs" {
     source_labels = ["__meta_kubernetes_pod_name"]
     target_label  = "service_name"
   }
-  rule {
-    source_labels = ["__meta_kubernetes_pod_container_name"]
-    target_label  = "container"
-  }
   forward_to = [loki.process.extract_metadata.receiver]
 }
 
 loki.process "extract_metadata" {
   forward_to = [loki.write.loki_endpoint.receiver]
 
-  // Bóc tách trace_id và duration từ nội dung log (dạng logfmt)
+  // Sửa lỗi logfmt: Trích xuất trace_id và level từ nội dung log
+  // Nếu gặp log không đúng định dạng, Alloy sẽ bỏ qua thay vì báo lỗi liên tục
   stage.logfmt {
     mapping = {
       "trace_id" = "",
-      "duration" = "",
       "level"    = "",
+      "duration" = "",
     }
   }
 
-  // Gán level từ nội dung log vào metadata của Loki để hiển thị màu sắc
+  // Gán level vào label để hiển thị màu sắc trên Grafana (Error=Đỏ, Warn=Vàng)
   stage.labels {
     values = {
       "level" = "level",
@@ -93,11 +90,15 @@ loki.write "loki_endpoint" {
 }
 
 // =====================================================
-// 4. TRACES (Tempo): Nhận dữ liệu OTLP từ App
+// 4. TRACES (Tempo): Nhận dữ liệu gRPC từ App
 // =====================================================
 otelcol.receiver.otlp "otlp_receiver" {
-  grpc { endpoint = "0.0.0.0:4317" }
-  http { endpoint = "0.0.0.0:4318" }
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
   output {
     traces = [otelcol.exporter.otlp.tempo_endpoint.input]
   }
@@ -106,6 +107,8 @@ otelcol.receiver.otlp "otlp_receiver" {
 otelcol.exporter.otlp "tempo_endpoint" {
   client {
     endpoint = "tempo:4317"
-    tls { insecure = true }
+    tls {
+      insecure = true
+    }
   }
 }

@@ -43,6 +43,9 @@ spec:
       labels:
         app.kubernetes.io/name: alloy
     spec:
+      # QUAN TRỌNG: hostNetwork giúp giải quyết lỗi UNAVAILABLE trên Kind
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       serviceAccountName: alloy-sa
       containers:
         - name: alloy
@@ -56,7 +59,7 @@ spec:
             - name: http-ui
               containerPort: 12345
             - name: otlp-grpc
-              containerPort: 4317 # Cổng nhận Trace từ Python App
+              containerPort: 4317
             - name: otlp-http
               containerPort: 4318
           securityContext:
@@ -75,7 +78,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: alloy-config-final # Đảm bảo tên này khớp với lệnh create configmap của bạn
+            name: alloy-config-final
         - name: varlog
           hostPath:
             path: /var/log
