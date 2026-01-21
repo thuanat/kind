@@ -1,9 +1,13 @@
-// --- 1. DISCOVERY ---
+// =====================================================
+// 1. DISCOVERY: Tìm các Pod đang chạy trong Kind
+// =====================================================
 discovery.kubernetes "all_pods" {
   role = "pod"
 }
 
-// --- 2. METRICS (Mimir) ---
+// =====================================================
+// 2. METRICS: Thu thập và đẩy về Mimir
+// =====================================================
 prometheus.scrape "metrics_collector" {
   targets    = discovery.kubernetes.all_pods.targets
   forward_to = [prometheus.relabel.metrics_filter.receiver]
@@ -28,11 +32,34 @@ prometheus.remote_write "mimir_endpoint" {
   }
 }
 
-// --- 3. LOGS (Loki) ---
+// =====================================================
+// 3. LOGS: Gắn nhãn chuẩn trước khi đẩy về Loki
+// =====================================================
 loki.source.kubernetes "logs_collector" {
   targets    = discovery.kubernetes.all_pods.targets
+  forward_to = [loki.relabel.pod_logs.receiver]
+}
+
+// KHỐI QUAN TRỌNG: Giúp bạn lọc log theo Pod, Container, Namespace trên Grafana
+loki.relabel "pod_logs" {
   forward_to = [loki.write.loki_endpoint.receiver]
-  // Đã xóa dòng start_at_beginning gây lỗi
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_node_name"]
+    target_label  = "node_name"
+  }
 }
 
 loki.write "loki_endpoint" {
@@ -41,7 +68,9 @@ loki.write "loki_endpoint" {
   }
 }
 
-// --- 4. TRACES (Tempo) ---
+// =====================================================
+// 4. TRACES: Nhận dữ liệu OTLP đẩy về Tempo
+// =====================================================
 otelcol.receiver.otlp "otlp_receiver" {
   grpc { endpoint = "0.0.0.0:4317" }
   http { endpoint = "0.0.0.0:4318" }
