@@ -1,9 +1,13 @@
-// 1. DISCOVERY
+// =====================================================
+// 1. DISCOVERY: Tự động tìm kiếm các Pod trong Cluster
+// =====================================================
 discovery.kubernetes "all_pods" {
   role = "pod"
 }
 
-// 2. METRICS (Mimir)
+// =====================================================
+// 2. METRICS (Mimir): Thu thập và đẩy Metric
+// =====================================================
 prometheus.scrape "metrics_collector" {
   targets    = discovery.kubernetes.all_pods.targets
   forward_to = [prometheus.relabel.metrics_filter.receiver]
@@ -11,6 +15,7 @@ prometheus.scrape "metrics_collector" {
 
 prometheus.relabel "metrics_filter" {
   forward_to = [prometheus.remote_write.mimir_endpoint.receiver]
+  
   rule {
     source_labels = ["__meta_kubernetes_namespace"]
     target_label  = "namespace"
@@ -19,7 +24,7 @@ prometheus.relabel "metrics_filter" {
     source_labels = ["__meta_kubernetes_pod_name"]
     target_label  = "pod"
   }
-  // QUAN TRỌNG: Gắn thêm nhãn service để khớp với Traces
+  // Thêm nhãn service_name để khớp với Logs và Traces
   rule {
     source_labels = ["__meta_kubernetes_pod_name"]
     target_label  = "service_name"
@@ -33,42 +38,52 @@ prometheus.remote_write "mimir_endpoint" {
   }
 }
 
-// 3. LOGS (Loki)
+// =====================================================
+// 3. LOGS (Loki): Thu thập, bóc tách TraceID và đẩy Log
+// =====================================================
 loki.source.kubernetes "logs_collector" {
   targets    = discovery.kubernetes.all_pods.targets
   forward_to = [loki.relabel.pod_logs.receiver]
 }
 
 loki.relabel "pod_logs" {
-  // Đồng bộ nhãn pod và service_name với Metrics và Traces
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
   rule {
     source_labels = ["__meta_kubernetes_pod_name"]
     target_label  = "pod"
   }
   rule {
     source_labels = ["__meta_kubernetes_pod_name"]
-    target_label  = "service_name" 
+    target_label  = "service_name"
   }
   rule {
-    source_labels = ["__meta_kubernetes_namespace"]
-    target_label  = "namespace"
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
   }
-  // Nhãn giúp phân loại app simulator của bạn
-  rule {
-    replacement  = "my-simulator"
-    target_label = "app"
-  }
-  forward_to = [loki.process.extract_trace_id.receiver]
+  forward_to = [loki.process.extract_metadata.receiver]
 }
 
-// KHỐI MỚI: Tự động bóc tách TraceID từ nội dung log
-loki.process "extract_trace_id" {
+loki.process "extract_metadata" {
   forward_to = [loki.write.loki_endpoint.receiver]
 
+  // Bóc tách trace_id và duration từ nội dung log (dạng logfmt)
   stage.logfmt {
-    mapping = { "trace_id" = "" }
+    mapping = {
+      "trace_id" = "",
+      "duration" = "",
+      "level"    = "",
+    }
   }
-  // Nếu log dạng JSON, dùng stage.json { mapping = { "trace_id" = "traceId" } }
+
+  // Gán level từ nội dung log vào metadata của Loki để hiển thị màu sắc
+  stage.labels {
+    values = {
+      "level" = "level",
+    }
+  }
 }
 
 loki.write "loki_endpoint" {
@@ -77,7 +92,9 @@ loki.write "loki_endpoint" {
   }
 }
 
-// 4. TRACES (Tempo)
+// =====================================================
+// 4. TRACES (Tempo): Nhận dữ liệu OTLP từ App
+// =====================================================
 otelcol.receiver.otlp "otlp_receiver" {
   grpc { endpoint = "0.0.0.0:4317" }
   http { endpoint = "0.0.0.0:4318" }

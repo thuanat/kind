@@ -127,7 +127,58 @@ EOF
 
 
 # apply config.alloy
+
 kubectl create configmap alloy-config-final --from-file=config.alloy=config.alloy --dry-run=client -o yaml | kubectl apply -f -
 
-
 kubectl rollout restart ds alloy
+
+
+# APP:
+
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: opentelemetry-app
+  labels:
+    app: my-simulator
+spec:
+  containers:
+  - name: python-app
+    image: python:3.9
+    command: ["sh", "-c"]
+    args:
+      - |
+        pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+        python3 -c "
+        import time, logging, random, uuid
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
+
+        resource = Resource(attributes={'service.name': 'python-app'})
+        exporter = OTLPSpanExporter(endpoint='http://alloy:4317', insecure=True)
+        provider = TracerProvider(resource=resource)
+        provider.add_span_processor(BatchSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+        tracer = trace.get_tracer(__name__)
+
+        while True:
+            with tracer.start_as_current_span('process-request') as span:
+                t_id = format(span.get_span_context().trace_id, '032x')
+                rand = random.random()
+                if rand > 0.8:
+                    delay = 3.5
+                    print(f'level=warn msg=\"Slow transaction detected\" duration={delay}s trace_id={t_id} service=python-app')
+                    time.sleep(delay)
+                elif rand > 0.6:
+                    print(f'level=error msg=\"Database timeout\" trace_id={t_id} service=python-app')
+                    span.set_status(trace.Status(trace.StatusCode.ERROR))
+                else:
+                    print(f'level=info msg=\"Transaction success\" trace_id={t_id} service=python-app')
+                    time.sleep(0.1)
+            time.sleep(1)
+        "
+EOF
