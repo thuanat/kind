@@ -1,12 +1,12 @@
 // =====================================================
-// 1. DISCOVERY: Tìm các Pod đang chạy trong Cluster
+// 1. DISCOVERY
 // =====================================================
 discovery.kubernetes "all_pods" {
   role = "pod"
 }
 
 // =====================================================
-// 2. METRICS: Thu thập và đẩy về Mimir
+// 2. METRICS
 // =====================================================
 prometheus.scrape "metrics_collector" {
   targets    = discovery.kubernetes.all_pods.targets
@@ -33,18 +33,14 @@ prometheus.remote_write "mimir_endpoint" {
 }
 
 // =====================================================
-// 3. LOGS: Thu thập, Gắn nhãn và đẩy về Loki
+// 3. LOGS
 // =====================================================
 loki.source.kubernetes "logs_collector" {
   targets    = discovery.kubernetes.all_pods.targets
   forward_to = [loki.relabel.pod_logs.receiver]
-  // Thuộc tính này nằm ở đây là đúng chuẩn
-  tail_from_end = true
 }
 
 loki.relabel "pod_logs" {
-  forward_to = [loki.write.loki_endpoint.receiver]
-
   rule {
     source_labels = ["__meta_kubernetes_namespace"]
     target_label  = "namespace"
@@ -58,14 +54,10 @@ loki.relabel "pod_logs" {
     target_label  = "container"
   }
   rule {
-    source_labels = ["__meta_kubernetes_pod_node_name"]
-    target_label  = "node_name"
-  }
-  // Gắn thêm nhãn job cố định để dễ quản lý
-  rule {
     replacement  = "kubernetes-logs"
     target_label = "job"
   }
+  forward_to = [loki.write.loki_endpoint.receiver]
 }
 
 loki.write "loki_endpoint" {
@@ -75,7 +67,7 @@ loki.write "loki_endpoint" {
 }
 
 // =====================================================
-// 4. TRACES: Nhận dữ liệu OTLP đẩy về Tempo
+// 4. TRACES
 // =====================================================
 otelcol.receiver.otlp "otlp_receiver" {
   grpc { endpoint = "0.0.0.0:4317" }
