@@ -1,12 +1,30 @@
-// --- 1. DISCOVERY: Tự động tìm tất cả Pod trong Cluster ---
+// =====================================================
+// 1. DISCOVERY: Tìm kiếm các đối tượng trong Cluster
+// =====================================================
 discovery.kubernetes "all_pods" {
   role = "pod"
 }
 
-// --- 2. METRICS (Đẩy về Mimir) ---
+// =====================================================
+// 2. METRICS: Thu thập và đẩy về Mimir
+// =====================================================
 prometheus.scrape "metrics_collector" {
   targets    = discovery.kubernetes.all_pods.targets
+  forward_to = [prometheus.relabel.metrics_filter.receiver]
+}
+
+prometheus.relabel "metrics_filter" {
   forward_to = [prometheus.remote_write.mimir_endpoint.receiver]
+
+  // Gắn nhãn Namespace và Pod cho Metrics
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
 }
 
 prometheus.remote_write "mimir_endpoint" {
@@ -16,9 +34,27 @@ prometheus.remote_write "mimir_endpoint" {
   }
 }
 
-// --- 3. LOGS (Đẩy về Loki) ---
+// =====================================================
+// 3. LOGS: Thu thập và đẩy về Loki
+// =====================================================
 loki.source.kubernetes "logs_collector" {
   targets    = discovery.kubernetes.all_pods.targets
+  forward_to = [loki.process.labels.receiver]
+  
+  // Quan trọng: Tránh lỗi 400 "entry too far behind" bằng cách 
+  // chỉ đọc log từ thời điểm Alloy khởi chạy
+  start_at_beginning = false
+}
+
+loki.process "labels" {
+  // Tự động trích xuất metadata từ Kubernetes để gắn nhãn cho Log
+  stage.labels {
+    values = {
+      namespace = "namespace",
+      pod       = "pod",
+      container = "container",
+    }
+  }
   forward_to = [loki.write.loki_endpoint.receiver]
 }
 
@@ -28,7 +64,9 @@ loki.write "loki_endpoint" {
   }
 }
 
-// --- 4. TRACES (Nhận OTLP và đẩy về Tempo) ---
+// =====================================================
+// 4. TRACES: Nhận OTLP và đẩy về Tempo
+// =====================================================
 otelcol.receiver.otlp "otlp_receiver" {
   grpc { endpoint = "0.0.0.0:4317" }
   http { endpoint = "0.0.0.0:4318" }
