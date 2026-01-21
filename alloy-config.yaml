@@ -5,12 +5,16 @@ metadata:
   namespace: default
 data:
   config.alloy: |
-    // 1. DISCOVERY
+    // ==========================================
+    // 1. DISCOVERY (Tìm kiếm Pods)
+    // ==========================================
     discovery.kubernetes "all_pods" {
       role = "pod"
     }
 
+    // ==========================================
     // 2. METRICS (Mimir)
+    // ==========================================
     prometheus.scrape "metrics_collector" {
       targets    = discovery.kubernetes.all_pods.targets
       forward_to = [prometheus.relabel.metrics_filter.receiver]
@@ -39,13 +43,21 @@ data:
       }
     }
 
+    // ==========================================
     // 3. LOGS (Loki)
+    // ==========================================
     loki.source.kubernetes "logs_collector" {
       targets    = discovery.kubernetes.all_pods.targets
       forward_to = [loki.relabel.pod_logs.receiver]
     }
 
     loki.relabel "pod_logs" {
+      // GIẢI PHÁP: Chỉ giữ lại log từ namespace default để tránh loop log hệ thống
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        regex         = "default"
+        action        = "keep"
+      }
       rule {
         source_labels = ["__meta_kubernetes_namespace"]
         target_label  = "namespace"
@@ -64,35 +76,26 @@ data:
     loki.process "extract_metadata" {
       forward_to = [loki.write.loki_endpoint.receiver]
 
-      // Giải mã vỏ bọc Kubernetes (Sửa lỗi logfmt syntax error)
+      // Giải mã vỏ bọc CRI (Kubernetes log format)
       stage.cri {}
 
-      // Phân loại log: JSON vs Logfmt
-      stage.match {
-        selector = "{namespace!=\"\"} |~ \"^\\\\{\""
-        stage.json {
-          expressions = { "level" = "level", "msg" = "msg" }
+      // Tự động nhận diện định dạng log của App Python (logfmt)
+      stage.logfmt {
+        mapping = {
+          "level"    = "",
+          "trace_id" = "",
+          "duration" = "",
         }
       }
 
-      stage.match {
-        selector = "{namespace!=\"\"} !~ \"^\\\\{\""
-        stage.logfmt {
-          mapping = {
-            "level"    = "",
-            "trace_id" = "",
-            "duration" = "",
-          }
-        }
-      }
-
-      // Sửa lỗi 400: Ép dùng thời gian lúc Alloy đọc log
+      // SỬA LỖI 400: Ép sử dụng thời gian lúc Alloy nhận log
       stage.timestamp {
         format = "RFC3339"
         source = "time"
         action_on_failure = "skip"
       }
 
+      // Đưa level vào label để lọc nhanh trong Grafana
       stage.labels {
         values = { "level" = "level" }
       }
@@ -104,7 +107,9 @@ data:
       }
     }
 
+    // ==========================================
     // 4. TRACES (Tempo)
+    // ==========================================
     otelcol.receiver.otlp "otlp_receiver" {
       grpc { endpoint = "0.0.0.0:4317" }
       http { endpoint = "0.0.0.0:4318" }
