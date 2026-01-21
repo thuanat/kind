@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-config
+data:
+  mimir.yaml: |
+    target: all
+    multitenancy_enabled: false
+    common:
+      storage:
+        backend: filesystem
+    ingester:
+      ring:
+        kvstore:
+          store: inmemory
+        replication_factor: 1
+    distributor:
+      ring:
+        kvstore:
+          store: inmemory
+    ruler:
+      ring:
+        kvstore:
+          store: inmemory
+    blocks_storage:
+      backend: filesystem
+      filesystem:
+        dir: /tmp/mimir/blocks
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir-standalone
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http-metrics
+  selector:
+    app: mimir-standalone
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-standalone
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels:
+      app: mimir-standalone
+  template:
+    metadata:
+      labels:
+        app: mimir-standalone
+    spec:
+      containers:
+        - name: mimir
+          image: grafana/mimir:latest
+          args:
+            - "-config.file=/etc/mimir/mimir.yaml"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/mimir
+      volumes:
+        - name: config-volume
+          configMap:
+            name: mimir-config

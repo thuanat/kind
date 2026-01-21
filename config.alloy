@@ -1,88 +1,45 @@
-// ======================================================
-// GLOBAL
-// ======================================================
-logging {
-  level  = "info"
-  format = "logfmt"
-}
-
-// ======================================================
-// DISCOVERY KUBERNETES
-// ======================================================
-discovery.kubernetes "pods" {
+// --- 1. DISCOVERY: Tự động tìm tất cả Pod trong Cluster ---
+discovery.kubernetes "all_pods" {
   role = "pod"
 }
 
-// ======================================================
-// METRICS → MIMIR (PROMETHEUS PATH)
-// ======================================================
-prometheus.scrape "kubernetes_pods" {
-  targets = discovery.kubernetes.pods.targets
-
-  forward_to = [
-    prometheus.remote_write.mimir.receiver,
-  ]
+// --- 2. METRICS (Đẩy về Mimir) ---
+prometheus.scrape "metrics_collector" {
+  targets    = discovery.kubernetes.all_pods.targets
+  forward_to = [prometheus.remote_write.mimir_endpoint.receiver]
 }
 
-prometheus.remote_write "mimir" {
+prometheus.remote_write "mimir_endpoint" {
   endpoint {
-    url = "http://mimir-gateway/api/v1/push"
+    url = "http://mimir-standalone:8080/api/v1/push"
+    headers = { "X-Scope-OrgID" = "anonymous" }
   }
 }
 
-// ======================================================
-// LOGS → LOKI
-// ======================================================
-loki.source.kubernetes "pods" {
-  targets    = discovery.kubernetes.pods.targets
-  forward_to = [loki.process.k8s.receiver]
+// --- 3. LOGS (Đẩy về Loki) ---
+loki.source.kubernetes "logs_collector" {
+  targets    = discovery.kubernetes.all_pods.targets
+  forward_to = [loki.write.loki_endpoint.receiver]
 }
 
-loki.process "k8s" {
-  stage.labels {
-    values = {
-      cluster = "k8s-lab",
-    }
-  }
-
-  stage.labels {
-    values = {
-      namespace = "kubernetes_namespace_name",
-      pod       = "kubernetes_pod_name",
-      container = "kubernetes_container_name",
-    }
-  }
-
-  forward_to = [loki.write.loki.receiver]
-}
-
-loki.write "loki" {
+loki.write "loki_endpoint" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
   }
 }
 
-// ======================================================
-// TRACES → TEMPO (OTELCOL PIPELINE – ĐÚNG CHUẨN)
-// ======================================================
-otelcol.receiver.otlp "otlp" {
-  grpc {}
-  http {}
-}
-
-otelcol.processor.batch "batch" {}
-
-otelcol.exporter.otlp "tempo" {
-  client {
-    endpoint = "tempo:4317"
-    tls {
-      insecure = true
-    }
+// --- 4. TRACES (Nhận OTLP và đẩy về Tempo) ---
+otelcol.receiver.otlp "otlp_receiver" {
+  grpc { endpoint = "0.0.0.0:4317" }
+  http { endpoint = "0.0.0.0:4318" }
+  output {
+    traces = [otelcol.exporter.otlp.tempo_endpoint.input]
   }
 }
 
-otelcol.pipeline "traces" {
-  receivers  = [otelcol.receiver.otlp.otlp]
-  processors = [otelcol.processor.batch.batch]
-  exporters  = [otelcol.exporter.otlp.tempo]
+otelcol.exporter.otlp "tempo_endpoint" {
+  client {
+    endpoint = "tempo:4317"
+    tls { insecure = true }
+  }
 }

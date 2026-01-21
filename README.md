@@ -51,3 +51,76 @@ kubectl -n kube-system patch configmap coredns --type merge -p '{"data":{"Corefi
 
 # Khởi động lại CoreDNS để nhận cấu hình mới
 kubectl rollout restart deployment coredns -n kube-system
+
+
+
+# Fixed mimir
+
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-config
+data:
+  mimir.yaml: |
+    target: all
+    multitenancy_enabled: false
+    common:
+      storage:
+        backend: filesystem
+    blocks_storage:
+      backend: filesystem
+      filesystem:
+        dir: /tmp/mimir/blocks
+    alertmanager_storage:
+      backend: filesystem
+      filesystem:
+        dir: /tmp/mimir/alerts
+    ruler_storage:
+      backend: filesystem
+      filesystem:
+        dir: /tmp/mimir/rules
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir-standalone
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http-metrics
+  selector:
+    app: mimir-standalone
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-standalone
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mimir-standalone
+  template:
+    metadata:
+      labels:
+        app: mimir-standalone
+    spec:
+      containers:
+        - name: mimir
+          image: grafana/mimir:latest
+          args:
+            - "-config.file=/etc/mimir/mimir.yaml"
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/mimir
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+      volumes:
+        - name: config-volume
+          configMap:
+            name: mimir-config
+EOF
