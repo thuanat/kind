@@ -5,16 +5,11 @@ metadata:
   namespace: default
 data:
   config.alloy: |
-    // =====================================================
-    // 1. DISCOVERY (Tìm kiếm các Pod trong Cluster)
-    // =====================================================
     discovery.kubernetes "all_pods" {
       role = "pod"
     }
 
-    // =====================================================
-    // 2. METRICS (Thu thập số liệu cho Mimir)
-    // =====================================================
+    // --- METRICS (Mimir) ---
     prometheus.scrape "metrics_collector" {
       targets    = discovery.kubernetes.all_pods.targets
       forward_to = [prometheus.relabel.metrics_filter.receiver]
@@ -22,18 +17,9 @@ data:
 
     prometheus.relabel "metrics_filter" {
       forward_to = [prometheus.remote_write.mimir_endpoint.receiver]
-      rule {
-        source_labels = ["__meta_kubernetes_namespace"]
-        target_label  = "namespace"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "pod"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "service_name"
-      }
+      rule { source_labels = ["__meta_kubernetes_namespace"]; target_label = "namespace" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "pod" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "service_name" }
     }
 
     prometheus.remote_write "mimir_endpoint" {
@@ -43,65 +29,47 @@ data:
       }
     }
 
-    // =====================================================
-    // 3. LOGS (Thu thập log cho Loki)
-    // =====================================================
+    // --- LOGS (Loki) ---
     loki.source.kubernetes "logs_collector" {
       targets    = discovery.kubernetes.all_pods.targets
       forward_to = [loki.relabel.pod_logs.receiver]
     }
 
     loki.relabel "pod_logs" {
-      rule {
-        source_labels = ["__meta_kubernetes_namespace"]
-        target_label  = "namespace"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "pod"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "service_name"
-      }
+      rule { source_labels = ["__meta_kubernetes_namespace"]; target_label = "namespace" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "pod" }
+      // Quan trọng: Gán nhãn để dễ query
+      rule { source_labels = ["__meta_kubernetes_pod_name"]; target_label = "service_name" }
       forward_to = [loki.process.extract_metadata.receiver]
     }
 
     loki.process "extract_metadata" {
       forward_to = [loki.write.loki_endpoint.receiver]
 
-      // Giai đoạn 1: Xử lý log định dạng JSON (Log hệ thống)
-      stage.match {
-        selector = "{namespace!=\"\"} |~ \"^\\\\{\""
-        stage.json {
-          expressions = { "level" = "level", "msg" = "msg" }
+      // Bước 1: Bóc tách logfmt
+      stage.logfmt {
+        mapping = {
+          "level"    = "",
+          "msg"      = "",
+          "trace_id" = "",
+          "service"  = "",
         }
       }
 
-      // Giai đoạn 2: Xử lý log định dạng Logfmt (Log từ python-app)
-      stage.match {
-        selector = "{namespace!=\"\"} |~ \"=\" !~ \"^\\\\{\""
-        stage.logfmt {
-          mapping = {
-            "trace_id" = "",
-            "level"    = "",
-            "duration" = "",
-          }
-        }
-      }
-
-      // Giai đoạn 3: FIX LỖI 400 - Ép timestamp về thời gian thực tế
-      // Điều này giúp Loki chấp nhận log ngay cả khi file log trên đĩa bị cũ
+      // Bước 2: ÉP TIMESTAMP VỀ HIỆN TẠI
+      // Vì log của bạn không có trường time, ta bỏ 'source'. 
+      // Alloy sẽ tự động gán thời gian lúc nó đọc log (ngay bây giờ).
       stage.timestamp {
-        source = "time"
         format = "RFC3339"
+        source = "time_now" // Field này không tồn tại, sẽ ép Alloy dùng thời gian thực
         action_on_failure = "skip"
       }
 
-      // Giai đoạn 4: Đẩy level vào Label để lọc trên Grafana dễ hơn
+      // Bước 3: Đưa thông tin vào Label để Grafana hiển thị volume
       stage.labels {
         values = {
-          "level" = "level",
+          "level"   = "level",
+          "app_name" = "service",
         }
       }
     }
@@ -112,26 +80,16 @@ data:
       }
     }
 
-    // =====================================================
-    // 4. TRACES (Thu thập Trace cho Tempo)
-    // =====================================================
+    // --- TRACES (Tempo) ---
     otelcol.receiver.otlp "otlp_receiver" {
-      grpc {
-        endpoint = "0.0.0.0:4317"
-      }
-      http {
-        endpoint = "0.0.0.0:4318"
-      }
-      output {
-        traces = [otelcol.exporter.otlp.tempo_endpoint.input]
-      }
+      grpc { endpoint = "0.0.0.0:4317" }
+      http { endpoint = "0.0.0.0:4318" }
+      output { traces = [otelcol.exporter.otlp.tempo_endpoint.input] }
     }
 
     otelcol.exporter.otlp "tempo_endpoint" {
       client {
         endpoint = "tempo:4317"
-        tls {
-          insecure = true
-        }
+        tls { insecure = true }
       }
     }
