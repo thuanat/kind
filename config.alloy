@@ -24,7 +24,6 @@ prometheus.relabel "metrics_filter" {
     source_labels = ["__meta_kubernetes_pod_name"]
     target_label  = "pod"
   }
-  // Thêm nhãn service_name để đồng bộ với Logs và Traces
   rule {
     source_labels = ["__meta_kubernetes_pod_name"]
     target_label  = "service_name"
@@ -65,8 +64,6 @@ loki.relabel "pod_logs" {
 loki.process "extract_metadata" {
   forward_to = [loki.write.loki_endpoint.receiver]
 
-  // Sửa lỗi logfmt: Trích xuất trace_id và level từ nội dung log
-  // Nếu gặp log không đúng định dạng, Alloy sẽ bỏ qua thay vì báo lỗi liên tục
   stage.logfmt {
     mapping = {
       "trace_id" = "",
@@ -75,7 +72,6 @@ loki.process "extract_metadata" {
     }
   }
 
-  // Gán level vào label để hiển thị màu sắc trên Grafana (Error=Đỏ, Warn=Vàng)
   stage.labels {
     values = {
       "level" = "level",
