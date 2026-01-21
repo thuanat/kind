@@ -43,6 +43,7 @@ loki.source.kubernetes "logs_collector" {
 // KHỐI QUAN TRỌNG: Giúp bạn lọc log theo Pod, Container, Namespace trên Grafana
 loki.relabel "pod_logs" {
   forward_to = [loki.write.loki_endpoint.receiver]
+  tail_from_end = true
 
   rule {
     source_labels = ["__meta_kubernetes_namespace"]

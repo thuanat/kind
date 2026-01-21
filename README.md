@@ -124,3 +124,10 @@ spec:
           configMap:
             name: mimir-config
 EOF
+
+
+# apply config.alloy
+kubectl create configmap alloy-config-final --from-file=config.alloy=config.alloy --dry-run=client -o yaml | kubectl apply -f -
+
+
+kubectl rollout restart ds alloy
