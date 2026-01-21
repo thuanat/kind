@@ -6,14 +6,14 @@ metadata:
 data:
   config.alloy: |
     // =====================================================
-    // 1. DISCOVERY: Tìm kiếm các Pod đang chạy
+    // 1. DISCOVERY
     // =====================================================
     discovery.kubernetes "all_pods" {
       role = "pod"
     }
 
     // =====================================================
-    // 2. METRICS (Mimir): Thu thập số liệu Prometheus
+    // 2. METRICS (Mimir)
     // =====================================================
     prometheus.scrape "metrics_collector" {
       targets    = discovery.kubernetes.all_pods.targets
@@ -45,7 +45,7 @@ data:
     }
 
     // =====================================================
-    // 3. LOGS (Loki): Thu thập và bóc tách dữ liệu
+    // 3. LOGS (Loki)
     // =====================================================
     loki.source.kubernetes "logs_collector" {
       targets    = discovery.kubernetes.all_pods.targets
@@ -71,21 +71,19 @@ data:
     loki.process "extract_metadata" {
       forward_to = [loki.write.loki_endpoint.receiver]
 
-      // --- LOGIC XỬ LÝ ĐỂ TRÁNH LỖI LOGFMT ---
+      // --- LOGIC XỬ LÝ (SỬA LỖI SYNTAX) ---
 
-      // 1. Nếu là JSON (bắt đầu bằng {), dùng stage.json
-      // Selector { } chọn tất cả log, sau đó filter regex kiểm tra ký tự đầu là {
+      // 1. Xử lý JSON: Chọn các log có namespace (tất cả) VÀ bắt đầu bằng {
       stage.match {
-        selector = "{ } |~ \"^\\\\{\""
+        selector = "{namespace!=\"\"} |~ \"^\\\\{\""
         stage.json {
           expressions = { "level" = "level", "msg" = "msg" }
         }
       }
 
-      // 2. Nếu là logfmt (có dấu = và KHÔNG bắt đầu bằng {)
-      // Selector { } chọn tất cả log, sau đó filter: phải có "=" VÀ không được bắt đầu bằng "{"
+      // 2. Xử lý Logfmt: Chọn các log có namespace VÀ có dấu = VÀ KHÔNG bắt đầu bằng {
       stage.match {
-        selector = "{ } |~ \"=\" !~ \"^\\\\{\""
+        selector = "{namespace!=\"\"} |~ \"=\" !~ \"^\\\\{\""
         stage.logfmt {
           mapping = {
             "trace_id" = "",
@@ -95,7 +93,7 @@ data:
         }
       }
 
-      // 3. Gán nhãn level nếu trích xuất thành công (từ json hoặc logfmt)
+      // 3. Gán nhãn level
       stage.labels {
         values = {
           "level" = "level",
@@ -110,7 +108,7 @@ data:
     }
 
     // =====================================================
-    // 4. TRACES (Tempo): Nhận dữ liệu gRPC từ App
+    // 4. TRACES (Tempo)
     // =====================================================
     otelcol.receiver.otlp "otlp_receiver" {
       grpc {
