@@ -71,17 +71,21 @@ data:
     loki.process "extract_metadata" {
       forward_to = [loki.write.loki_endpoint.receiver]
 
-      // Lọc JSON trước để tránh lỗi logfmt
+      // --- LOGIC XỬ LÝ ĐỂ TRÁNH LỖI LOGFMT ---
+
+      // 1. Nếu là JSON (bắt đầu bằng {), dùng stage.json
+      // Selector { } chọn tất cả log, sau đó filter regex kiểm tra ký tự đầu là {
       stage.match {
-        selector = "|~ \"^\\\\{\""
+        selector = "{ } |~ \"^\\\\{\""
         stage.json {
           expressions = { "level" = "level", "msg" = "msg" }
         }
       }
 
-      // Chỉ chạy logfmt nếu có dấu '=' và KHÔNG phải JSON
+      // 2. Nếu là logfmt (có dấu = và KHÔNG bắt đầu bằng {)
+      // Selector { } chọn tất cả log, sau đó filter: phải có "=" VÀ không được bắt đầu bằng "{"
       stage.match {
-        selector = "|~ \"=\" !~ \"^\\\\{\""
+        selector = "{ } |~ \"=\" !~ \"^\\\\{\""
         stage.logfmt {
           mapping = {
             "trace_id" = "",
@@ -91,6 +95,7 @@ data:
         }
       }
 
+      // 3. Gán nhãn level nếu trích xuất thành công (từ json hoặc logfmt)
       stage.labels {
         values = {
           "level" = "level",
