@@ -5,79 +5,129 @@ metadata:
   namespace: default
 data:
   config.alloy: |
-    discovery.kubernetes "all_pods" {
-      role = "pod"
+    // =====================================================
+// 1. DISCOVERY: Tìm kiếm các Pod đang chạy
+// =====================================================
+discovery.kubernetes "all_pods" {
+  role = "pod"
+}
+
+// =====================================================
+// 2. METRICS (Mimir): Thu thập số liệu Prometheus
+// =====================================================
+prometheus.scrape "metrics_collector" {
+  targets    = discovery.kubernetes.all_pods.targets
+  forward_to = [prometheus.relabel.metrics_filter.receiver]
+}
+
+prometheus.relabel "metrics_filter" {
+  forward_to = [prometheus.remote_write.mimir_endpoint.receiver]
+  
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "service_name"
+  }
+}
+
+prometheus.remote_write "mimir_endpoint" {
+  endpoint {
+    url = "http://mimir-standalone:8080/api/v1/push"
+    headers = { "X-Scope-OrgID" = "anonymous" }
+  }
+}
+
+// =====================================================
+// 3. LOGS (Loki): Thu thập và bóc tách dữ liệu
+// =====================================================
+loki.source.kubernetes "logs_collector" {
+  targets    = discovery.kubernetes.all_pods.targets
+  forward_to = [loki.relabel.pod_logs.receiver]
+}
+
+loki.relabel "pod_logs" {
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "service_name"
+  }
+  forward_to = [loki.process.extract_metadata.receiver]
+}
+
+loki.process "extract_metadata" {
+  forward_to = [loki.write.loki_endpoint.receiver]
+
+  // --- GIẢI PHÁP SỬA LỖI LOGFMT Ở ĐÂY ---
+
+  // Bước 1: Nếu là JSON (bắt đầu bằng {), dùng stage.json
+  stage.match {
+    selector = "|~ \"^\\\\{\""
+    stage.json {
+      expressions = { "level" = "level", "msg" = "msg" }
     }
+  }
 
-    // --- THU THẬP LOGS ---
-    loki.source.kubernetes "logs_collector" {
-      targets    = discovery.kubernetes.all_pods.targets
-      forward_to = [loki.relabel.pod_logs.receiver]
-    }
-
-    loki.relabel "pod_logs" {
-      rule {
-        source_labels = ["__meta_kubernetes_namespace"]
-        target_label  = "namespace"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "pod"
-      }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "service_name"
-      }
-      forward_to = [loki.process.extract_metadata.receiver]
-    }
-
-    loki.process "extract_metadata" {
-      forward_to = [loki.write.loki_endpoint.receiver]
-
-      // Thử parse JSON trước (dành cho log hệ thống)
-      stage.json {
-        expressions = { "msg" = "msg", "level" = "level" }
-      }
-
-      // Sau đó parse Logfmt (dành cho App Simulator)
-      // Nếu lỗi, nó sẽ im lặng đi tiếp thay vì văng error log
-      stage.logfmt {
-        mapping = {
-          "trace_id" = "",
-          "level"    = "",
-          "msg"      = "",
-        }
-      }
-
-      stage.labels {
-        values = { "level" = "level" }
+  // Bước 2: Nếu là logfmt (có dấu = và KHÔNG phải JSON), dùng stage.logfmt
+  // Việc kiểm tra "!~ ^\{" giúp tránh lỗi 'unexpected "' khi log là JSON
+  stage.match {
+    selector = "|~ \"=\" !~ \"^\\\\{\""
+    stage.logfmt {
+      mapping = {
+        "trace_id" = "",
+        "level"    = "",
+        "duration" = "",
       }
     }
+  }
 
-    loki.write "loki_endpoint" {
-      endpoint {
-        url = "http://loki:3100/loki/api/v1/push"
-      }
+  // Bước 3: Gán nhãn level nếu trích xuất thành công
+  stage.labels {
+    values = {
+      "level" = "level",
     }
+  }
+}
 
-    // --- THU THẬP TRACES ---
-    otelcol.receiver.otlp "otlp_receiver" {
-      grpc {
-        endpoint = "0.0.0.0:4317"
-      }
-      http {
-        endpoint = "0.0.0.0:4318"
-      }
-      output {
-        traces = [otelcol.exporter.otlp.tempo_endpoint.input]
-      }
-    }
+loki.write "loki_endpoint" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
 
-    otelcol.exporter.otlp "tempo_endpoint" {
-      client {
-        endpoint = "tempo:4317"
-        tls {
-          insecure = true
-        }
-      }
+// =====================================================
+// 4. TRACES (Tempo): Nhận dữ liệu gRPC từ App
+// =====================================================
+otelcol.receiver.otlp "otlp_receiver" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces = [otelcol.exporter.otlp.tempo_endpoint.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo_endpoint" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
     }
+  }
+}

@@ -189,6 +189,22 @@ EOF
 
 
 
+#Xóa sạch Service cũ: kubectl delete svc alloy
+
+#Apply ConfigMap: kubectl apply -f alloy-config.yaml
+
+#Apply DaemonSet & Service: kubectl apply -f alloy-daemonset.yaml
+
+#Restart App: kubectl delete pod opentelemetry-app (để nó kết nối lại vào Endpoint mới).
+
+Cách kiểm tra:
+Chạy kubectl get endpoints alloy. Nếu thấy IP là THÀNH CÔNG.
+
+Chạy kubectl logs opentelemetry-app. Nếu không thấy lỗi UNAVAILABLE là THÀNH CÔNG.
+
+
+
+
 # Xóa bỏ service cũ đang bị lỗi selector
 kubectl delete svc alloy
 

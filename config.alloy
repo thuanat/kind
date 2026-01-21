@@ -38,7 +38,7 @@ prometheus.remote_write "mimir_endpoint" {
 }
 
 // =====================================================
-// 3. LOGS (Loki): Thu thập và bóc tách TraceID
+// 3. LOGS (Loki): Thu thập và bóc tách dữ liệu
 // =====================================================
 loki.source.kubernetes "logs_collector" {
   targets    = discovery.kubernetes.all_pods.targets
@@ -64,14 +64,30 @@ loki.relabel "pod_logs" {
 loki.process "extract_metadata" {
   forward_to = [loki.write.loki_endpoint.receiver]
 
-  stage.logfmt {
-    mapping = {
-      "trace_id" = "",
-      "level"    = "",
-      "duration" = "",
+  // --- GIẢI PHÁP SỬA LỖI LOGFMT Ở ĐÂY ---
+
+  // Bước 1: Nếu là JSON (bắt đầu bằng {), dùng stage.json
+  stage.match {
+    selector = "|~ \"^\\\\{\""
+    stage.json {
+      expressions = { "level" = "level", "msg" = "msg" }
     }
   }
 
+  // Bước 2: Nếu là logfmt (có dấu = và KHÔNG phải JSON), dùng stage.logfmt
+  // Việc kiểm tra "!~ ^\{" giúp tránh lỗi 'unexpected "' khi log là JSON
+  stage.match {
+    selector = "|~ \"=\" !~ \"^\\\\{\""
+    stage.logfmt {
+      mapping = {
+        "trace_id" = "",
+        "level"    = "",
+        "duration" = "",
+      }
+    }
+  }
+
+  // Bước 3: Gán nhãn level nếu trích xuất thành công
   stage.labels {
     values = {
       "level" = "level",
