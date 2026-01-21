@@ -6,14 +6,14 @@ metadata:
 data:
   config.alloy: |
     // ==========================================
-    // 1. DISCOVERY (Tìm kiếm Pods)
+    // 1. DISCOVERY: Tìm các Pod trong Cluster
     // ==========================================
     discovery.kubernetes "all_pods" {
       role = "pod"
     }
 
     // ==========================================
-    // 2. METRICS (Mimir)
+    // 2. METRICS: Thu thập số liệu cho Mimir
     // ==========================================
     prometheus.scrape "metrics_collector" {
       targets    = discovery.kubernetes.all_pods.targets
@@ -30,10 +30,6 @@ data:
         source_labels = ["__meta_kubernetes_pod_name"]
         target_label  = "pod"
       }
-      rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
-        target_label  = "service_name"
-      }
     }
 
     prometheus.remote_write "mimir_endpoint" {
@@ -44,7 +40,7 @@ data:
     }
 
     // ==========================================
-    // 3. LOGS (Loki)
+    // 3. LOGS: Thu thập và gán nhãn cho Loki
     // ==========================================
     loki.source.kubernetes "logs_collector" {
       targets    = discovery.kubernetes.all_pods.targets
@@ -52,12 +48,14 @@ data:
     }
 
     loki.relabel "pod_logs" {
-      // GIẢI PHÁP: Chỉ giữ lại log từ namespace default để tránh loop log hệ thống
+      // CHỈ GIỮ LOG TRONG NAMESPACE DEFAULT (Sửa lỗi loop log)
       rule {
         source_labels = ["__meta_kubernetes_namespace"]
         regex         = "default"
         action        = "keep"
       }
+
+      // GÁN NHÃN ĐÚNG CHO APP
       rule {
         source_labels = ["__meta_kubernetes_namespace"]
         target_label  = "namespace"
@@ -66,20 +64,22 @@ data:
         source_labels = ["__meta_kubernetes_pod_name"]
         target_label  = "pod"
       }
+      
+      // Lấy giá trị từ label 'app' của Pod để làm nhãn chính
       rule {
-        source_labels = ["__meta_kubernetes_pod_name"]
+        source_labels = ["__meta_kubernetes_pod_label_app"]
         target_label  = "service_name"
       }
+
       forward_to = [loki.process.extract_metadata.receiver]
     }
 
     loki.process "extract_metadata" {
       forward_to = [loki.write.loki_endpoint.receiver]
 
-      // Giải mã vỏ bọc CRI (Kubernetes log format)
       stage.cri {}
 
-      // Tự động nhận diện định dạng log của App Python (logfmt)
+      // Bóc tách nội dung logfmt (level, trace_id, duration)
       stage.logfmt {
         mapping = {
           "level"    = "",
@@ -88,14 +88,13 @@ data:
         }
       }
 
-      // SỬA LỖI 400: Ép sử dụng thời gian lúc Alloy nhận log
+      // Ép dùng thời gian hiện tại để tránh lỗi Code 400
       stage.timestamp {
         format = "RFC3339"
         source = "time"
-        action_on_failure = "skip"
       }
 
-      // Đưa level vào label để lọc nhanh trong Grafana
+      // Đưa level bóc được từ nội dung log ra thành Label để filter nhanh
       stage.labels {
         values = { "level" = "level" }
       }
@@ -108,7 +107,7 @@ data:
     }
 
     // ==========================================
-    // 4. TRACES (Tempo)
+    // 4. TRACES: Thu thập Trace cho Tempo
     // ==========================================
     otelcol.receiver.otlp "otlp_receiver" {
       grpc { endpoint = "0.0.0.0:4317" }
