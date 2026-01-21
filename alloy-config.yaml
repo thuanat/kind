@@ -5,11 +5,16 @@ metadata:
   namespace: default
 data:
   config.alloy: |
+    // =====================================================
+    // 1. DISCOVERY
+    // =====================================================
     discovery.kubernetes "all_pods" {
       role = "pod"
     }
 
-    // --- METRICS (Mimir) ---
+    // =====================================================
+    // 2. METRICS (Mimir)
+    // =====================================================
     prometheus.scrape "metrics_collector" {
       targets    = discovery.kubernetes.all_pods.targets
       forward_to = [prometheus.relabel.metrics_filter.receiver]
@@ -38,7 +43,9 @@ data:
       }
     }
 
-    // --- LOGS (Loki) ---
+    // =====================================================
+    // 3. LOGS (Loki)
+    // =====================================================
     loki.source.kubernetes "logs_collector" {
       targets    = discovery.kubernetes.all_pods.targets
       forward_to = [loki.relabel.pod_logs.receiver]
@@ -63,15 +70,17 @@ data:
     loki.process "extract_metadata" {
       forward_to = [loki.write.loki_endpoint.receiver]
 
+      // Xử lý Logfmt cho Python App
       stage.logfmt {
         mapping = {
           "level"    = "",
           "msg"      = "",
           "trace_id" = "",
-          "service"  = "",
+          "duration" = "",
         }
       }
 
+      // Ép timestamp về thời gian thực để Loki không từ chối log cũ
       stage.timestamp {
         format = "RFC3339"
         source = "time"
@@ -80,8 +89,7 @@ data:
 
       stage.labels {
         values = {
-          "level"   = "level",
-          "service" = "service",
+          "level" = "level",
         }
       }
     }
@@ -92,7 +100,9 @@ data:
       }
     }
 
-    // --- TRACES (Tempo) ---
+    // =====================================================
+    // 4. TRACES (Tempo)
+    // =====================================================
     otelcol.receiver.otlp "otlp_receiver" {
       grpc {
         endpoint = "0.0.0.0:4317"
